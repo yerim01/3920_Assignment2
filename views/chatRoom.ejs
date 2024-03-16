@@ -2,6 +2,10 @@
     <%- include("templates/header_LoggedIn") %>
 <% } %>
 <link rel="stylesheet" href="/css/chat-room.css" />
+<style>
+    /* .chat-messages { max-width: 600px; margin: auto; } */
+    
+</style>
 <main class="content">
     <div class="container p-0">
 
@@ -48,8 +52,24 @@
                                             <div class="text-muted small text-nowrap mt-2"><%= new Date(chatMessages[i].created_at).toLocaleString() %></div>
                                         </div>
                                         <%= chatMessages[i].text %>
+                                        <button type="button" class="btn btn-outline-warning" id="add-reaction">+</button>
+                                        <div class="reaction-container" 
+                                            data-message-id="<%= chatMessages[i].message_id %>">
+                                            <div class="selected-emoji">
+                                                <% if (chatMessages[i].emoji_id) { %>
+                                                    <%= chatMessages[i].emoji_name %>
+                                                <% } %>
+                                            </div>
+                                            <div class="reaction-list">
+                                                <button class="add-reaction-btn" id="1">😻</button>
+                                                <button class="add-reaction-btn" id="2">💯</button>
+                                                <button class="add-reaction-btn" id="3">👍</button>
+                                                <button class="add-reaction-btn" id="4">❤️</button>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
+                                
                             <% } %>
                         <% } %>
                     </div>
@@ -63,18 +83,65 @@
                         </div>
                     </div>
                 </form>
-                
-
-                <!-- <div class="flex-grow-0 py-3 px-4 border-top">
-                    <div class="input-group">
-                        <input type="text" class="form-control" placeholder="Type your message">
-                        <button class="btn btn-primary">Send</button>
-                    </div>
-                </div> -->
 
             </div>
 		</div>
 	</div>
 </main>
+<script>
+    document.querySelectorAll('.add-reaction-btn').forEach(button => {
+        button.onclick = function() {
+            const emojiId = this.id;
+            const emoji = this.textContent;
+            const reactionContainer = this.closest('.reaction-container');
+            const messageId = reactionContainer.getAttribute('data-message-id');
 
+            // Hide the reaction list
+            const reactionList = reactionContainer.querySelector('.reaction-list');
+            reactionList.style.display = 'none';
+
+            const selectedEmojiDisplay = reactionContainer.querySelector('.selected-emoji');
+
+            // Send data to the server
+            fetch('/addReaction', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    emojiId: emojiId,
+                    messageId: messageId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if(data.success) {
+                    // selectedEmojiDisplay.textContent += ` ${emoji}`;
+                    selectedEmojiDisplay.textContent = emoji;
+                } else {
+                    console.error('Failed to add reaction:', data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error adding reaction:', error);
+            });
+        };
+
+    });
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const addButton = document.getElementById('add-reaction');
+
+        addButton.addEventListener('click', function() {
+            const reactionList = this.nextElementSibling.querySelector('.reaction-list');
+
+            // Toggle the display of the reaction list
+            if (reactionList.style.display === 'block') {
+                reactionList.style.display = 'none';
+            } else {
+                reactionList.style.display = 'block';
+            }
+        });
+    });
+</script>
 <%- include("templates/footer") %>

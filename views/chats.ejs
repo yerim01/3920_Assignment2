@@ -19,11 +19,13 @@
                 <% if (chatList[i].room_name == recentMsgTime[i].room_name) {%>
                     <small class="opacity-50 text-nowrap"> Last Message: <%= new Date(recentMsgTime[i].recent_msg_time).toLocaleString() %></small>
                 <% } %>
-                <% if (unreadMessages.length == 0) { %>
-                    <small class="opacity-50 text-nowrap">Unread: 0</small>
-                <% } else { %>
-                    <small class="opacity-50 text-nowrap">Unread: <%= unreadMessages[i].unread_count %></small>
-                <% } %>
+                <div>
+                    <% 
+                    var unreadMessage = unreadMessages.find(um => um.room_name === chatList[i].room_name);
+                    var unreadCount = unreadMessage ? unreadMessage.unread_count : 0;
+                    %>
+                    <small class="opacity-50 text-nowrap">Unread: <%= unreadCount %></small>
+                </div>
                 </div>
             </a>
         <% } %>

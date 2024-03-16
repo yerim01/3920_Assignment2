@@ -46,6 +46,7 @@ const navLinks_loggedIn = [
 ]
 
 app.use(express.urlencoded({extended: false})); //middle ware
+app.use(express.json());
 
 var mongoStore = MongoStore.create({
 	mongoUrl: `mongodb+srv://${mongodb_user}:${mongodb_password}@${mongodb_host}/sessions`,
@@ -134,7 +135,7 @@ app.post('/loginSubmit', async (req, res) => {
     try {
         // Query the database for a user with the provided username
         const [rows] = await database.execute(
-            'SELECT * FROM user WHERE username = ?',
+            'SELECT user_id, username, password FROM user WHERE username = ?',
             [username]
         );
 
@@ -194,6 +195,22 @@ app.post('/messageSubmit', async (req, res) => {
     }
 });
 
+app.post('/addReaction', async (req, res) => {
+    const { emojiId, messageId } = req.body;
+    const userId = req.session.userId;
+    console.log("emojiId:", emojiId);
+    console.log("userId:", userId);
+    console.log("messageId:", messageId);
+
+    try {
+        await db_utils.insertEmojiReaction(messageId, emojiId, userId);
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Error adding reaction:', error);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+});
+
 app.get('/logout', (req,res) => {
     req.session.destroy();
     res.redirect('/');
@@ -211,6 +228,7 @@ app.get('/chats', async (req,res) => {
         // console.log("chatList:", chatList);
         // console.log("userId:", userId);
         // console.log("recentMessagesTime:", recentMsgTime);
+        // console.log("unreadMessages:", unreadMessages);
     
         res.render("chats", {req: req, chatList: chatList, unreadMessages : unreadMessages, 
             recentMsgTime: recentMsgTime});
@@ -228,8 +246,15 @@ app.get('/chatRoom/:roomName', async (req,res) => {
         req.session.roomUserId = roomUserId;
         req.session.roomName = roomName;
 
-        // console.log("chatMessages:", chatMessages);
+        console.log("chatMessages:", chatMessages);
+
         res.render("chatRoom", {req: req, userId, chatMessages, roomName});
+
+        const messageIds = await db_utils.getUnreadMessageIds(userId, roomName);
+        for (let i = 0; i < messageIds.length; i++) {
+            // console.log("messageIds[" + i + "]: ", messageIds[i].message_id);
+            await db_utils.updateReadStatus(messageIds[i].message_id, userId, 1);
+        }
     }
 });
   

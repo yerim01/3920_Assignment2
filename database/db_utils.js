@@ -97,11 +97,13 @@ async function getRecentMessagesTime() {
 
 async function getChatMessages(roomName) {
 	let sqlQuery = `
-	SELECT u.user_id, u.username, m.text, m.created_at
+	SELECT u.user_id, u.username, m.text, m.created_at, m.message_id, e.emoji_id, e.emoji_name
 	FROM message as m
 	JOIN room_user AS ru ON ru.room_user_id = m.room_user_id
 	JOIN user AS u ON u.user_id = ru.user_id
 	JOIN room AS r ON r.room_id = ru.room_id
+	LEFT JOIN emoji_user AS eu ON eu.message_id = m.message_id
+	LEFT JOIN emoji AS e ON e.emoji_id = eu.emoji_id
 	WHERE r.room_name = :roomName
 	ORDER BY m.created_at ASC;
 	`;
@@ -195,6 +197,32 @@ async function getRoomUserIds(roomName) {
 
 }
 
+async function getUnreadMessageIds(userId, roomName) {
+	let sqlQuery = `
+	SELECT ms.user_id, ms.message_id
+	FROM message_status AS ms
+	JOIN message AS m ON ms.message_id = m.message_id
+	JOIN room_user AS ru ON ru.room_user_id = m.room_user_id
+	JOIN room AS r ON r.room_id = ru.room_id
+	WHERE ms.user_id = :userId AND ms.is_read = 0 AND r.room_name = :roomName;
+	`;
+
+	let params = {
+		userId: userId,
+		roomName: roomName
+	};
+
+	try {
+		const results = await database.query(sqlQuery, params);
+		console.log("Successfully got unread message ids");
+		return results[0];
+	} catch(err) {
+		console.log("Error getting unread message ids");
+		console.log(err);
+		return null;
+	}
+}
+
 async function insertMessage(roomUserId, message) {
 	let insertQuery = `
 	INSERT INTO message (room_user_id, text)
@@ -229,24 +257,75 @@ async function insertReadStatus(messageId, userId, isRead) {
 	}
 }
 
-// async function updateUnreadStatus(messageId, userId, isRead) {
-// 	let updateQuery = `
-// 	UPDATE message_status
-// 	SET message_id = ?, ;`;
+async function insertEmojiReaction(messageId, emojiId, userId) {
+    // Step 1: Check if the user has already reacted to this message
+    const checkQuery = `
+        SELECT * FROM emoji_user
+        WHERE message_id = ? AND user_id = ?;
+    `;
+    const checkParams = [messageId, userId];
+    const [existingReactions] = await database.execute(checkQuery, checkParams);
 
-// 	let params = [isRead, messageId, userId];
+    if (existingReactions.length > 0) {
+        // User has already reacted, so update the existing reaction
+        const updateQuery = `
+            UPDATE emoji_user
+            SET emoji_id = ?
+            WHERE message_id = ? AND user_id = ?;
+        `;
+        const updateParams = [emojiId, messageId, userId];
+        await database.execute(updateQuery, updateParams);
+        console.log("Successfully updated reaction");
+    } else {
+        // No existing reaction, insert a new one
+        const insertQuery = `
+            INSERT INTO emoji_user (message_id, user_id, emoji_id)
+            VALUES (?, ?, ?);
+        `;
+        const insertParams = [messageId, userId, emojiId];
+        await database.execute(insertQuery, insertParams);
+        console.log("Successfully inserted new reaction");
+    }
+}
+
+
+// async function insertEmojiReaction(messageId, emojiId, userId) {
+// 	let insertQuery = `
+// 	INSERT INTO emoji_user (message_id, emoji_id, user_id)
+// 	VALUES (?, ?, ?);`;
+
+// 	let params = [messageId, emojiId, userId];
 
 // 	try {
-// 		const results = await database.execute(updateQuery, params);
-// 		console.log("Successfully updated unread status");
+// 		const results = await database.execute(insertQuery, params);
+// 		console.log("Successfully inserted emoji reaction");
 // 		return results[0];
 // 	} catch(err) {
-// 		console.log("Error updating unread status", err);
+// 		console.log("Error inserting emoji reaction", err);
 // 		throw err;
 // 	}
 // }
 
+async function updateReadStatus(messageId, userId, isRead) {
+	let updateQuery = `
+	UPDATE message_status
+	SET is_read = ?
+	WHERE message_id = ? AND user_id = ?;`;
+
+	let params = [isRead, messageId, userId];
+
+	try {
+		const results = await database.execute(updateQuery, params);
+		console.log("Successfully updated unread status");
+		return results[0];
+	} catch(err) {
+		console.log("Error updating unread status", err);
+		throw err;
+	}
+}
+
 module.exports = {printMySQLVersion, getChatList, getRoomsUnreadMessages,
 				getRecentMessagesTime, getChatMessages, getRoomUserId, 
 				insertMessage, getRecentMessageId, insertReadStatus,
-				getRoomUserIds};
+				getRoomUserIds, getUnreadMessageIds, updateReadStatus,
+				insertEmojiReaction};
