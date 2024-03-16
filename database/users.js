@@ -1,4 +1,5 @@
 // const database = include('../databaseConnection');
+const mysql = require('mysql2/promise');
 const database = require('../databaseConnection');
 
 async function createUser(postData) {
@@ -48,24 +49,28 @@ async function getUsers(postData) {
 	}
 }
 
-async function getUser(postData) {
+async function getUserId(username) {
 	let getUserSQL = `
-		SELECT user_id, username, password, type
+		SELECT user_id
 		FROM user
-		JOIN user_type USING (user_type_id)
 		WHERE username = :user;
 	`;
 
 	let params = {
-		user: postData.user
-	}
+		user: username
+	};
 	
 	try {
 		const results = await database.query(getUserSQL, params);
 
-        console.log("Successfully found user");
-		console.log(results[0]);
-		return results[0];
+        if (results.length > 0) {
+            console.log("Successfully found user");
+            console.log(results[0]);
+            return results[0].user_id;
+        } else {
+            console.log("User not found");
+            return null;
+        }
 	}
 	catch(err) {
 		console.log("Error trying to find user");
@@ -74,4 +79,4 @@ async function getUser(postData) {
 	}
 }
 
-module.exports = {createUser, getUsers, getUser};
+module.exports = {createUser, getUsers, getUserId};

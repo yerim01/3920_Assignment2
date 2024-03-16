@@ -151,6 +151,7 @@ app.post('/loginSubmit', async (req, res) => {
             // Password matches, set up the session
             req.session.authenticated = true;
             req.session.name = user.username;
+            req.session.userId = user.user_id;
             req.session.cookie.maxAge = expireTime;
 
             return res.redirect('/chats');
@@ -164,45 +165,71 @@ app.post('/loginSubmit', async (req, res) => {
     }
 });
 
+app.post('/messageSubmit', async (req, res) => {
+    const { message } = req.body;
+
+    try {
+        const roomUserId = req.session.roomUserId;
+        const userId = req.session.userId;
+        const roomName = req.session.roomName;
+        await db_utils.insertMessage(roomUserId, message);
+        const messageId = await db_utils.getRecentMessageId(roomUserId);
+        const userIds = await db_utils.getRoomUserIds(roomName);
+        console.log("userIds:", userIds);
+        console.log("messageId:", messageId);
+
+        for (let i = 0; i < userIds.length; i++) {
+            if (userIds[i].user_id == userId) {
+                await db_utils.insertReadStatus(messageId, userIds[i].user_id, 1)
+            } else {
+                // console.log("userIds["+ i + "]:", userIds[i].user_id);
+                await db_utils.insertReadStatus(messageId, userIds[i].user_id, 0)
+            }
+        }
+
+        return res.redirect('/chatRoom/' + roomName);
+    } catch (error) {
+        console.error('Message Sedning error:', error);
+        return res.status(500).render("error", {errorMessage: "Internal server error"});
+    }
+});
 
 app.get('/logout', (req,res) => {
     req.session.destroy();
     res.redirect('/');
 });
 
-app.get('/chats', (req,res) => {
+app.get('/chats', async (req,res) => {
     if (!req.session.authenticated) {
         res.redirect('/login');
     } else {
-        // Array of image filenames
-        const images = ['fluffy.gif', 'socks.gif', 'computer.gif'];
-        // Select a random image
-        const selectedImage = images[Math.floor(Math.random() * images.length)];
-        // Render the chats page and pass the selectedImage
-        res.render("chats", {req: req, selectedImage});
+        const userId = req.session.userId;
+        const chatList = await db_utils.getChatList(userId);
+        const unreadMessages = await db_utils.getRoomsUnreadMessages(userId);
+        const recentMsgTime = await db_utils.getRecentMessagesTime(userId);
+
+        // console.log("chatList:", chatList);
+        // console.log("userId:", userId);
+        // console.log("recentMessagesTime:", recentMsgTime);
+    
+        res.render("chats", {req: req, chatList: chatList, unreadMessages : unreadMessages, 
+            recentMsgTime: recentMsgTime});
     }
 });
 
+app.get('/chatRoom/:roomName', async (req,res) => {
+    if (!req.session.authenticated) {
+        res.redirect('/login');
+    } else {
+        const userId = req.session.userId;
+        const roomName = decodeURIComponent(req.params.roomName);
+        const chatMessages = await db_utils.getChatMessages(roomName);
+        const roomUserId = await db_utils.getRoomUserId(userId, roomName);
+        req.session.roomUserId = roomUserId;
+        req.session.roomName = roomName;
 
-app.get('/promote/:id', async (req, res) => {
-    try {
-        const id = req.params.id;
-        await userCollection.updateOne({ _id: ObjectId(id) }, { $set: { user_type: 'admin' } });
-        res.redirect('/admin');
-    } catch (err) {
-        console.error(err);
-        res.status(500).send('Internal Server Error');
-    }
-});
-  
-app.get('/demote/:id', async (req, res) => {
-    try {
-        const id = req.params.id;
-        await userCollection.updateOne({ _id: ObjectId(id) }, { $set: { user_type: 'user' } });
-        res.redirect('/admin');
-    } catch (err) {
-        console.error(err);
-        res.status(500).send('Internal Server Error');
+        // console.log("chatMessages:", chatMessages);
+        res.render("chatRoom", {req: req, userId, chatMessages, roomName});
     }
 });
   
