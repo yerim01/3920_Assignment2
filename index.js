@@ -45,7 +45,8 @@ const navLinks_loggedIn = [
     {name: "Logout", link: "/logout"}
 ]
 
-app.use(express.urlencoded({extended: false})); //middle ware
+// app.use(express.urlencoded({extended: false})); //middle ware
+app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
 var mongoStore = MongoStore.create({
@@ -111,13 +112,10 @@ app.post('/signupSubmit', async (req, res) => {
     try {
         const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-        // Using MySQL's parameterized query feature to prevent SQL injection
         const [result] = await database.execute(
             'INSERT INTO user (username, password) VALUES (?, ?)',
             [username, hashedPassword]
         );
-
-        console.log("Inserted user with ID:", result.insertId);
 
         req.session.authenticated = true;
         req.session.name = username;
@@ -198,9 +196,9 @@ app.post('/messageSubmit', async (req, res) => {
 app.post('/addReaction', async (req, res) => {
     const { emojiId, messageId } = req.body;
     const userId = req.session.userId;
-    console.log("emojiId:", emojiId);
-    console.log("userId:", userId);
-    console.log("messageId:", messageId);
+    // console.log("emojiId:", emojiId);
+    // console.log("userId:", userId);
+    // console.log("messageId:", messageId);
 
     try {
         await db_utils.insertEmojiReaction(messageId, emojiId, userId);
@@ -208,6 +206,47 @@ app.post('/addReaction', async (req, res) => {
     } catch (error) {
         console.error('Error adding reaction:', error);
         res.status(500).json({ success: false, message: 'Internal server error' });
+    }
+});
+
+app.post('/createGroupSubmit', async (req, res) => {
+    const { groupName, selectedIds} = req.body;
+    const userId = req.session.userId;
+    // console.log("groupName:", groupName);
+    // console.log("selectedIds:", selectedIds);
+
+    if (!selectedIds) {
+        console.log("No users selected.");
+        return res.redirect('/chats');
+    }
+
+    try {
+        const roomId = await db_utils.insertNewRoom(groupName);
+        await db_utils.insertRoomUser(selectedIds, userId, roomId);
+        res.redirect('/chatRoom/' + groupName);
+    } catch (error) {
+        console.error('Error creating group:', error);
+        res.status(500).render("error", {errorMessage: "Internal server error"});
+    }
+});
+
+app.post('/inviteUsersSubmit', async (req, res) => {
+    const { groupName, selectedIds, messageIds} = req.body;
+    // console.log("groupName:", groupName);
+    // console.log("selectedIds:", selectedIds);
+    // console.log("messageIds:", messageIds);
+
+    if (!selectedIds) {
+        console.log("No users selected.");
+        return res.redirect('/chatRoom/' + groupName);
+    }
+
+    try {
+        await db_utils.updateRoomUser(selectedIds, groupName, messageIds);
+        res.redirect('/chatRoom/' + groupName);
+    } catch (error) {
+        console.error('Error creating group:', error);
+        res.status(500).render("error", {errorMessage: "Internal server error"});
     }
 });
 
@@ -224,14 +263,16 @@ app.get('/chats', async (req,res) => {
         const chatList = await db_utils.getChatList(userId);
         const unreadMessages = await db_utils.getRoomsUnreadMessages(userId);
         const recentMsgTime = await db_utils.getRecentMessagesTime(userId);
+        const userList = await db_utils.getUserList();
 
         // console.log("chatList:", chatList);
         // console.log("userId:", userId);
         // console.log("recentMessagesTime:", recentMsgTime);
         // console.log("unreadMessages:", unreadMessages);
+        // console.log("userList:", userList);
     
         res.render("chats", {req: req, chatList: chatList, unreadMessages : unreadMessages, 
-            recentMsgTime: recentMsgTime});
+            recentMsgTime: recentMsgTime, userList: userList});
     }
 });
 
@@ -243,12 +284,16 @@ app.get('/chatRoom/:roomName', async (req,res) => {
         const roomName = decodeURIComponent(req.params.roomName);
         const chatMessages = await db_utils.getChatMessages(roomName);
         const roomUserId = await db_utils.getRoomUserId(userId, roomName);
+        const userList = await db_utils.getUserList();
+        const invitationList = await db_utils.getInviteUserList(roomName);
         req.session.roomUserId = roomUserId;
         req.session.roomName = roomName;
+        // console.log("invitationList:", invitationList);
 
-        console.log("chatMessages:", chatMessages);
+        // console.log("chatMessages: ", chatMessages);
+        // console.log("roomUserId: ", roomUserId);
 
-        res.render("chatRoom", {req: req, userId, chatMessages, roomName});
+        res.render("chatRoom", {req: req, userId, chatMessages, roomName, userList, invitationList});
 
         const messageIds = await db_utils.getUnreadMessageIds(userId, roomName);
         for (let i = 0; i < messageIds.length; i++) {

@@ -19,8 +19,7 @@
                             <strong><%= roomName %></strong>
                         </div>
                         <div>
-                            <!-- <button class="btn btn-info btn-lg mr-1 px-3 d-none d-md-inline-block">invite people</button> -->
-                            <button class="btn btn-light border btn-lg px-3">invite people</button>
+                            <%- include("invite_modal", { roomName, invitationList, chatMessages }) %>
                         </div>
                     </div>
                 </div>
@@ -52,13 +51,23 @@
                                             <div class="text-muted small text-nowrap mt-2"><%= new Date(chatMessages[i].created_at).toLocaleString() %></div>
                                         </div>
                                         <%= chatMessages[i].text %>
-                                        <button type="button" class="btn btn-outline-warning" id="add-reaction">+</button>
+                                        <button type="button" class="btn btn-outline-warning add-reaction-trigger">+</button>
+
                                         <div class="reaction-container" 
                                             data-message-id="<%= chatMessages[i].message_id %>">
                                             <div class="selected-emoji">
-                                                <% if (chatMessages[i].emoji_id) { %>
-                                                    <%= chatMessages[i].emoji_name %>
-                                                <% } %>
+                                                <%
+                                                var emojiNames = chatMessages[i].emoji_names ? chatMessages[i].emoji_names.split(',') : [];
+                                                var emojiUserIds = chatMessages[i].emoji_user_ids ? chatMessages[i].emoji_user_ids.split(',') : [];
+                                                var emojisToShow = [];
+                                                
+                                                for(var j = 0; j < emojiUserIds.length; j++) {
+                                                    if(emojiUserIds[j] == userId) { // Check if the current user reacted with this emoji
+                                                        emojisToShow.push(emojiNames[j]); // Add the emoji name to the list of emojis to show
+                                                    }
+                                                }
+                                                %>
+                                                <%= emojisToShow.join(' ') %> <!-- Display the emojis -->
                                             </div>
                                             <div class="reaction-list">
                                                 <button class="add-reaction-btn" id="1">😻</button>
@@ -130,18 +139,36 @@
     });
 
     document.addEventListener('DOMContentLoaded', function() {
-        const addButton = document.getElementById('add-reaction');
+        // Attach the event listener to the chat-messages container
+        document.querySelector('.chat-messages').addEventListener('click', function(e) {
+            // Check if the clicked element or any of its parents have the 'add-reaction-trigger' class
+            const target = e.target.closest('.add-reaction-trigger');
+            
+            if (target) {
+                // Find the closest reaction-container from the clicked button
+                const reactionContainer = target.closest('.chat-message-left').querySelector('.reaction-container');
 
-        addButton.addEventListener('click', function() {
-            const reactionList = this.nextElementSibling.querySelector('.reaction-list');
-
-            // Toggle the display of the reaction list
-            if (reactionList.style.display === 'block') {
-                reactionList.style.display = 'none';
-            } else {
-                reactionList.style.display = 'block';
+                // Assuming each .add-reaction-trigger button is followed by its .reaction-container
+                const reactionList = reactionContainer.querySelector('.reaction-list');
+                reactionList.style.display = reactionList.style.display === 'block' ? 'none' : 'block';
             }
         });
     });
+
+    // document.addEventListener('DOMContentLoaded', function() {
+    //     const addButton = document.getElementById('add-reaction');
+
+    //     addButton.addEventListener('click', function() {
+    //         const reactionList = this.nextElementSibling.querySelector('.reaction-list');
+
+    //         // Toggle the display of the reaction list
+    //         if (reactionList.style.display === 'block') {
+    //             reactionList.style.display = 'none';
+    //         } else {
+    //             reactionList.style.display = 'block';
+    //         }
+    //     });
+    // });
+
 </script>
 <%- include("templates/footer") %>

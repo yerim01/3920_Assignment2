@@ -1,0 +1,39 @@
+<!-- Button trigger modal -->
+<button type="button" class="btn btn-outline-warning" id="myBtn" data-bs-toggle="modal" data-bs-target="#exampleModal">
+    Invite Users
+</button>
+  
+<!-- Modal -->
+<div class="modal fade" id="exampleModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="exampleModalLabel">Invite Users</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <form action="/inviteUsersSubmit" method="post">
+            <% if(invitationList) { %>
+                <div class="modal-body">
+                    <div>- User List -</div>
+                    <% for(var i=0; i < invitationList.length; i++) { %>
+                        
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="selectedIds[]" value="<%= invitationList[i].user_id %>" id="user<%= invitationList[i].user_id %>">
+                                <label class="form-check-label" for="user<%= invitationList[i].user_id %>"> <%= invitationList[i].username %> </label>
+                            </div>
+                     
+                    <% } %>
+                </div>
+            <% } %>
+            <% for(let i = 0; i < chatMessages.length; i++) { %>
+                <input type="hidden" name="messageIds[]" value="<%= chatMessages[i].message_id %>">
+            <% } %>
+            <input type="hidden" name="groupName" value="<%= roomName %>">
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="submit" class="btn btn-primary">Invite</button>
+            </div>
+        </form>
+      </div>
+    </div>
+  </div>

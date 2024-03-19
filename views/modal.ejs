@@ -1,0 +1,38 @@
+<!-- Button trigger modal -->
+<button type="button" class="btn btn-primary" id="myBtn" data-bs-toggle="modal" data-bs-target="#exampleModal">
+    Create Group
+</button>
+  
+<!-- Modal -->
+<div class="modal fade" id="exampleModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="exampleModalLabel">Create Group</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <form action="/createGroupSubmit" method="post">
+            <% if(userList) { %>
+            <div class="modal-body">
+                <div class="form-group mb-3">
+                    <input class="form-control" type="text" name="groupName" id="newGroupName" placeholder="Enter group name" required>
+                </div>
+                <div>- User List -</div>
+                <% for(var i=0; i < userList.length; i++) { %>
+                    <% if (userList[i].user_id != req.session.userId) { %>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="selectedIds[]" value="<%= userList[i].user_id %>" id="user<%= userList[i].user_id %>">
+                            <label class="form-check-label" for="user<%= userList[i].user_id %>"> <%= userList[i].username %> </label>
+                        </div>
+                    <% } %>
+                <% } %>
+            </div>
+            <% } %>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="submit" class="btn btn-primary">Create Group</button>
+            </div>
+        </form>
+      </div>
+    </div>
+  </div>

@@ -25,7 +25,8 @@ async function getChatList(userId) {
 	FROM room
 	JOIN room_user AS ru ON ru.room_id = room.room_id
 	JOIN user ON user.user_id = ru.user_id
-	WHERE user.user_id = :userId;
+	WHERE user.user_id = :userId
+	ORDER BY room.room_name DESC;
 	`;
 
 	let params = {
@@ -78,7 +79,8 @@ async function getRecentMessagesTime() {
 	FROM message AS m
 	JOIN room_user AS ru ON ru.room_user_id = m.room_user_id
 	JOIN room AS r ON r.room_id = ru.room_id
-	GROUP BY r.room_name;
+	GROUP BY r.room_name
+	ORDER BY r.room_name DESC;
     `;
 
     try {
@@ -97,7 +99,15 @@ async function getRecentMessagesTime() {
 
 async function getChatMessages(roomName) {
 	let sqlQuery = `
-	SELECT u.user_id, u.username, m.text, m.created_at, m.message_id, e.emoji_id, e.emoji_name
+	SELECT 
+    u.user_id, 
+    u.username, 
+    m.text, 
+    m.created_at, 
+    m.message_id, 
+    GROUP_CONCAT(e.emoji_id) AS emoji_ids, 
+    GROUP_CONCAT(e.emoji_name) AS emoji_names, 
+    GROUP_CONCAT(eu.user_id) AS emoji_user_ids
 	FROM message as m
 	JOIN room_user AS ru ON ru.room_user_id = m.room_user_id
 	JOIN user AS u ON u.user_id = ru.user_id
@@ -105,6 +115,7 @@ async function getChatMessages(roomName) {
 	LEFT JOIN emoji_user AS eu ON eu.message_id = m.message_id
 	LEFT JOIN emoji AS e ON e.emoji_id = eu.emoji_id
 	WHERE r.room_name = :roomName
+	GROUP BY m.message_id
 	ORDER BY m.created_at ASC;
 	`;
 
@@ -123,6 +134,25 @@ async function getChatMessages(roomName) {
 	}
 
 }
+
+
+// async function getEmojiList() {
+// 	let sqlQuery = `
+// 	SELECT eu.message_id AS eu_message_id, eu.emoji_id, eu.user_id AS eu_user_id, e.emoji_name
+// 	FROM emoji_user AS eu
+// 	JOIN emoji AS e ON e.emoji_id = eu.emoji_id;
+// 	`;
+
+// 	try {
+// 		const results = await database.query(sqlQuery);
+// 		console.log("Successfully got emoji list");
+// 		return results[0];
+// 	} catch(err) {
+// 		console.log("Error getting emoji list");
+// 		console.log(err);
+// 		return [];
+// 	}
+// }
 
 async function getRoomUserId(userId, roomName) {
 	let sqlQuery = `
@@ -223,6 +253,51 @@ async function getUnreadMessageIds(userId, roomName) {
 	}
 }
 
+async function getUserList(){
+	let sqlQuery = `
+	SELECT user_id, username
+	FROM user;
+	`;
+
+	try {
+		const results = await database.query(sqlQuery);
+		console.log("Successfully got user list");
+		return results[0];
+	} catch(err) {
+		console.log("Error getting user list");
+		console.log(err);
+		return [];
+	}
+
+}
+
+async function getInviteUserList(roomName) {
+	let sqlQuery = `
+	SELECT u.user_id, u.username
+	FROM user AS u
+	WHERE NOT EXISTS (
+		SELECT 1
+		FROM room_user AS ru
+		JOIN room AS r ON r.room_id = ru.room_id
+		WHERE r.room_name = :roomName AND ru.user_id = u.user_id
+	);
+	`;
+
+	let params = {
+		roomName: roomName
+	};
+
+	try {
+		const results = await database.query(sqlQuery, params);
+		console.log("Successfully got user ids in room");
+		return results[0];
+	} catch(err) {
+		console.log("Error getting user ids in room");
+		console.log(err);
+		return [];
+	}
+}
+
 async function insertMessage(roomUserId, message) {
 	let insertQuery = `
 	INSERT INTO message (room_user_id, text)
@@ -288,23 +363,46 @@ async function insertEmojiReaction(messageId, emojiId, userId) {
     }
 }
 
+async function insertNewRoom(roomName) {
+	let insertRoomQuery = `
+	INSERT INTO room (room_name)
+	VALUES (?);
+	`;
 
-// async function insertEmojiReaction(messageId, emojiId, userId) {
-// 	let insertQuery = `
-// 	INSERT INTO emoji_user (message_id, emoji_id, user_id)
-// 	VALUES (?, ?, ?);`;
+	let params = [roomName];
 
-// 	let params = [messageId, emojiId, userId];
+	try {
+		const results = await database.execute(insertRoomQuery, params);
+		console.log("Successfully inserted new room entries");
+		return results[0].insertId;
+	} catch(err) {
+		console.log("Error inserting new room", err);
+		throw err;
+	}
+}
 
-// 	try {
-// 		const results = await database.execute(insertQuery, params);
-// 		console.log("Successfully inserted emoji reaction");
-// 		return results[0];
-// 	} catch(err) {
-// 		console.log("Error inserting emoji reaction", err);
-// 		throw err;
-// 	}
-// }
+async function insertRoomUser(selectedIds, userId, roomId) {
+	let insertRoomUserQuery = `
+	INSERT INTO room_user (user_id, room_id)
+	VALUES (?, ?);
+	`;
+
+	let params = [userId, roomId];
+
+	try {
+		for (let i = 0; i < selectedIds.length; i++) {
+			selectedParams = [selectedIds[i], roomId];
+			await database.execute(insertRoomUserQuery, selectedParams);
+		}
+
+		const results = await database.execute(insertRoomUserQuery, params);
+		console.log("Successfully inserted new room_user entries");
+		return results[0];
+	} catch(err) {
+		console.log("Error inserting new room_user", err);
+		throw err;
+	}
+}
 
 async function updateReadStatus(messageId, userId, isRead) {
 	let updateQuery = `
@@ -324,8 +422,74 @@ async function updateReadStatus(messageId, userId, isRead) {
 	}
 }
 
+async function updateRoomUser(selectedIds, roomName, messageIds) {
+    // Placeholder for the function that gets roomId by roomName
+    // Assuming you have this function implemented somewhere
+    const roomId = await getRoomIdByName(roomName);
+
+    if (!roomId) {
+        console.error("Room ID not found for the room name:", roomName);
+        throw new Error("Room ID not found.");
+    }
+
+    let insertRoomUserQuery = `
+    INSERT INTO room_user (user_id, room_id)
+    VALUES (?, ?);
+    `;
+
+    try {
+        for (let userId of selectedIds) {
+            let selectedParams = [userId, roomId];
+            // Execute insert query for each user
+            await database.execute(insertRoomUserQuery, selectedParams);
+        }
+        console.log("Successfully inserted new room_user entries");
+        for (let userId of selectedIds) {
+            await updateListOfReadStatus(messageIds, userId, 0);
+        }
+    } catch(err) {
+        console.log("Error inserting new room_user", err);
+        throw err; // Re-throwing the error to be caught by the calling function
+    }
+}
+
+async function getRoomIdByName(roomName) {
+    // Example implementation of getRoomIdByName
+    // Adjust according to your actual database schema and library
+    const query = `SELECT room_id FROM room WHERE room_name = ? LIMIT 1;`;
+    try {
+        const [rows] = await database.execute(query, [roomName]);
+        if (rows.length > 0) {
+            return rows[0].room_id; // Return the first matching room_id
+        }
+        return null; // Return null if no matching room found
+    } catch (err) {
+        console.error("Error fetching room ID by name:", err);
+        throw err;
+    }
+}
+
+async function updateListOfReadStatus(messageIds, userId, isRead) {
+	let insertQuery = `
+	INSERT INTO message_status (message_id, user_id, is_read)
+	VALUES (?, ?, ?);`;
+
+	try {
+		for (let messageId of messageIds) {
+            let params = [messageId, userId, isRead];
+            await database.execute(insertQuery, params);
+        }
+		console.log("Successfully updated unread status");
+	} catch(err) {
+		console.log("Error updating unread status", err);
+		throw err;
+	}
+}
+
+
 module.exports = {printMySQLVersion, getChatList, getRoomsUnreadMessages,
-				getRecentMessagesTime, getChatMessages, getRoomUserId, 
-				insertMessage, getRecentMessageId, insertReadStatus,
+				getRecentMessagesTime, getChatMessages, getInviteUserList,
+				getRoomUserId, insertMessage, getRecentMessageId, insertReadStatus,
 				getRoomUserIds, getUnreadMessageIds, updateReadStatus,
-				insertEmojiReaction};
+				insertEmojiReaction, getUserList, insertNewRoom,
+				insertRoomUser, updateRoomUser};
